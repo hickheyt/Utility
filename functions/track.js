@@ -60,6 +60,21 @@ exports.handler = async (event) => {
       return { statusCode: 500, body: 'DB error' };
     }
 
+    // Push notification via ntfy.sh
+    try {
+      await fetch('https://ntfy.sh/vis_alertz', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain',
+          'Title': '👀 New Portfolio Visitor',
+          'Priority': 'default',
+        },
+        body: `🌍 ${city}, ${country}\n🌐 ${browser} | ${os}\n📡 ${isp}`,
+      });
+    } catch (_) {
+      // Notification failure should never block the log
+    }
+
     return { statusCode: 200, body: JSON.stringify({ ok: true }) };
   } catch (err) {
     console.error('Function error:', err);
