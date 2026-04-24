@@ -10,10 +10,25 @@ exports.handler = async (event) => {
       'unknown';
 
     const body = JSON.parse(event.body || '{}');
-
     const ua = body.user_agent || '';
     const browser = parseBrowser(ua);
     const os = parseOS(ua);
+
+    // Lookup ISP + location from IP (free, no key needed, supports IPv4 + IPv6)
+    let isp = 'unknown', city = 'unknown', country = 'unknown';
+    if (ip !== 'unknown') {
+      try {
+        const geo = await fetch(`http://ip-api.com/json/${ip}?fields=isp,city,country,status`);
+        const geoData = await geo.json();
+        if (geoData.status === 'success') {
+          isp     = geoData.isp     || 'unknown';
+          city    = geoData.city    || 'unknown';
+          country = geoData.country || 'unknown';
+        }
+      } catch (_) {
+        // Geo lookup failed silently — still log the visit
+      }
+    }
 
     const response = await fetch(
       `${process.env.SUPABASE_URL}/rest/v1/visits`,
@@ -29,6 +44,9 @@ exports.handler = async (event) => {
           ip,
           browser,
           os,
+          isp,
+          city,
+          country,
           timezone:   body.timezone   || 'unknown',
           utc_time:   body.utc_time   || new Date().toISOString(),
           local_time: body.local_time || 'unknown',
@@ -53,8 +71,8 @@ function parseBrowser(ua) {
   if (/SamsungBrowser/.test(ua)) return 'Samsung Internet';
   if (/Edg\//.test(ua))          return 'Edge';
   if (/OPR\//.test(ua))          return 'Opera';
-  if (/CriOS/.test(ua))          return 'Chrome (iOS)';   // Chrome on iPhone/iPad
-  if (/FxiOS/.test(ua))          return 'Firefox (iOS)';  // Firefox on iPhone/iPad
+  if (/CriOS/.test(ua))          return 'Chrome (iOS)';
+  if (/FxiOS/.test(ua))          return 'Firefox (iOS)';
   if (/Chrome\//.test(ua))       return 'Chrome';
   if (/Firefox\//.test(ua))      return 'Firefox';
   if (/Safari\//.test(ua))       return 'Safari';
