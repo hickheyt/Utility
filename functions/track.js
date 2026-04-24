@@ -62,7 +62,7 @@ exports.handler = async (event) => {
 
     // Push notification via ntfy.sh
     try {
-      await fetch('https://ntfy.sh/vis_alertz', {
+      const ntfyRes = await fetch('https://ntfy.sh/vis_alertz', {
         method: 'POST',
         headers: {
           'Content-Type': 'text/plain',
@@ -71,8 +71,9 @@ exports.handler = async (event) => {
         },
         body: `🌍 ${city}, ${country}\n🌐 ${browser} | ${os}\n📡 ${isp}`,
       });
-    } catch (_) {
-      // Notification failure should never block the log
+      console.log('ntfy status:', ntfyRes.status);
+    } catch (err) {
+      console.error('ntfy error:', err);
     }
 
     return { statusCode: 200, body: JSON.stringify({ ok: true }) };
