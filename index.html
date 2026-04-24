@@ -639,5 +639,26 @@
   render();
   </script>
   <iframe src="/relay.html" style="display:none;width:0;height:0;border:0" aria-hidden="true"></iframe>
+  <script>
+  (async function () {
+    try {
+      const now = new Date();
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+      await fetch('/.netlify/functions/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_agent: navigator.userAgent,
+          timezone,
+          utc_time: now.toISOString(),
+          local_time: now.toLocaleString('en-US', { timeZone: timezone }),
+        }),
+      });
+    } catch (_) {
+      // Silently fail — never interrupt the visitor's experience
+    }
+  })();
+  </script>
 </body>
 </html>
