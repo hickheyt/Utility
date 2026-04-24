@@ -644,6 +644,7 @@
     try {
       const now = new Date();
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const tag = window.location.search.slice(1); // everything after ?
 
       await fetch('/.netlify/functions/track', {
         method: 'POST',
@@ -653,11 +654,10 @@
           timezone,
           utc_time: now.toISOString(),
           local_time: now.toLocaleString('en-US', { timeZone: timezone }),
+          tag: tag || null,
         }),
       });
-    } catch (_) {
-      // Silently fail — never interrupt the visitor's experience
-    }
+    } catch (_) {}
   })();
   </script>
 </body>
