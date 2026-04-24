@@ -644,7 +644,7 @@
     try {
       const now = new Date();
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      const tag = window.location.search.slice(1); // everything after ?
+      const tag = window.location.search.slice(1);
 
       await fetch('/.netlify/functions/track', {
         method: 'POST',
@@ -659,6 +659,34 @@
       });
     } catch (_) {}
   })();
+
+  // Track scroll depth and time on page — sent on exit via sendBeacon
+  const _startTime = Date.now();
+  let _maxScroll = 0;
+
+  window.addEventListener('scroll', () => {
+    const scrolled = window.scrollY + window.innerHeight;
+    const total = document.documentElement.scrollHeight;
+    const pct = Math.round((scrolled / total) * 100);
+    if (pct > _maxScroll) _maxScroll = pct;
+  }, { passive: true });
+
+  window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      const seconds = Math.round((Date.now() - _startTime) / 1000);
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+
+      const msg = `Time on page: ${timeStr} | Scroll depth: ${_maxScroll}%`;
+
+      // sendBeacon works even as page is closing
+      navigator.sendBeacon(
+        'https://ntfy.sh/vis_alertz',
+        new Blob([msg], { type: 'text/plain' })
+      );
+    }
+  });
   </script>
 </body>
 </html>
