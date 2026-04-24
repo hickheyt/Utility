@@ -60,6 +60,9 @@ exports.handler = async (event) => {
       return { statusCode: 500, body: 'DB error' };
     }
 
+    // Append query string tag to notification if present
+    const tag = body.tag ? ` | tag: ${body.tag}` : '';
+
     // Push notification via ntfy.sh
     try {
       const ntfyRes = await fetch('https://ntfy.sh/vis_alertz', {
@@ -69,7 +72,7 @@ exports.handler = async (event) => {
           'Title': 'New Portfolio Visitor',
           'Priority': 'default',
         },
-        body: `${city}, ${country} | ${browser} | ${os} | ${isp}`,
+        body: `${city}, ${country} | ${browser} | ${os} | ${isp}${tag}`,
       });
       console.log('ntfy status:', ntfyRes.status);
     } catch (err) {
