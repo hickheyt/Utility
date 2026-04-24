@@ -60,8 +60,13 @@ exports.handler = async (event) => {
       return { statusCode: 500, body: 'DB error' };
     }
 
-    // Append query string tag to notification if present
-    const tag = body.tag ? ` | tag: ${body.tag}` : '';
+    // Parse query string tag into readable key: value pairs
+    const tag = body.tag
+      ? ' | ' + body.tag.split('&').map(p => {
+          const [k, v] = p.split('=');
+          return `${decodeURIComponent(k)}: ${decodeURIComponent(v || '')}`;
+        }).join(' | ')
+      : '';
 
     // Push notification via ntfy.sh
     try {
