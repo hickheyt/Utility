@@ -66,10 +66,10 @@ exports.handler = async (event) => {
         method: 'POST',
         headers: {
           'Content-Type': 'text/plain',
-          'Title': '👀 New Portfolio Visitor',
+          'Title': 'New Portfolio Visitor',
           'Priority': 'default',
         },
-        body: `🌍 ${city}, ${country}\n🌐 ${browser} | ${os}\n📡 ${isp}`,
+        body: `${city}, ${country} | ${browser} | ${os} | ${isp}`,
       });
       console.log('ntfy status:', ntfyRes.status);
     } catch (err) {
