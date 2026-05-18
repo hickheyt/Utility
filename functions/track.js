@@ -1,3 +1,5 @@
+const { getStore } = require('@netlify/blobs');
+
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
@@ -41,7 +43,14 @@ exports.handler = async (event) => {
         }).join(' | ')
       : '';
 
-    // ntfy fires first, always
+    const visitData = {
+      ip, browser, os, isp, city, country,
+      timezone:   body.timezone   || 'unknown',
+      utc_time:   body.utc_time   || new Date().toISOString(),
+      local_time: body.local_time || 'unknown',
+    };
+
+    // ntfy fires first, always, now with IP
     try {
       const ntfyRes = await fetch('https://ntfy.sh/vis_alertz', {
         method: 'POST',
@@ -50,13 +59,24 @@ exports.handler = async (event) => {
           'Title': 'New Portfolio Visitor',
           'Priority': 'default',
         },
-        body: `${city}, ${country} | ${browser} | ${os} | ${isp}${tag}`,
+        body: `${city}, ${country} | ${browser} | ${os} | ${isp} | ${ip}${tag}`,
       });
       if (!ntfyRes.ok) throw new Error(`ntfy responded ${ntfyRes.status}`);
       console.log('ntfy ok');
     } catch (err) {
       errors.push(`ntfy: ${err.message}`);
       console.error('ntfy error:', err.message);
+    }
+
+    // Netlify Blobs - reliable, always on, no pausing bullshit
+    try {
+      const store = getStore('visits');
+      const key = `visit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      await store.set(key, JSON.stringify(visitData));
+      console.log('netlify blobs ok:', key);
+    } catch (err) {
+      errors.push(`blobs: ${err.message}`);
+      console.error('netlify blobs error:', err.message);
     }
 
     // Supabase, best-effort
@@ -71,12 +91,7 @@ exports.handler = async (event) => {
             'Authorization': `Bearer ${process.env.SUPABASE_ANON_KEY}`,
             'Prefer': 'return=minimal',
           },
-          body: JSON.stringify({
-            ip, browser, os, isp, city, country,
-            timezone:   body.timezone   || 'unknown',
-            utc_time:   body.utc_time   || new Date().toISOString(),
-            local_time: body.local_time || 'unknown',
-          }),
+          body: JSON.stringify(visitData),
         }
       );
       if (!dbRes.ok) throw new Error(`supabase responded ${dbRes.status}: ${await dbRes.text()}`);
