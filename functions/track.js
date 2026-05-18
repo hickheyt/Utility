@@ -3,6 +3,8 @@ exports.handler = async (event) => {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
+  const errors = [];
+
   try {
     const ip =
       event.headers['x-nf-client-connection-ip'] ||
@@ -14,53 +16,24 @@ exports.handler = async (event) => {
     const browser = parseBrowser(ua);
     const os = parseOS(ua);
 
-    // Lookup ISP + location from IP (free, no key needed, supports IPv4 + IPv6)
     let isp = 'unknown', city = 'unknown', country = 'unknown';
     if (ip !== 'unknown') {
       try {
         const geo = await fetch(`http://ip-api.com/json/${ip}?fields=isp,city,country,status`);
+        if (!geo.ok) throw new Error(`ip-api responded ${geo.status}`);
         const geoData = await geo.json();
         if (geoData.status === 'success') {
           isp     = geoData.isp     || 'unknown';
           city    = geoData.city    || 'unknown';
           country = geoData.country || 'unknown';
+        } else {
+          errors.push('geo: bad status from ip-api');
         }
-      } catch (_) {
-        // Geo lookup failed silently — still log the visit
+      } catch (err) {
+        errors.push(`geo: ${err.message}`);
       }
     }
 
-    const response = await fetch(
-      `${process.env.SUPABASE_URL}/rest/v1/visits`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': process.env.SUPABASE_ANON_KEY,
-          'Authorization': `Bearer ${process.env.SUPABASE_ANON_KEY}`,
-          'Prefer': 'return=minimal',
-        },
-        body: JSON.stringify({
-          ip,
-          browser,
-          os,
-          isp,
-          city,
-          country,
-          timezone:   body.timezone   || 'unknown',
-          utc_time:   body.utc_time   || new Date().toISOString(),
-          local_time: body.local_time || 'unknown',
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const err = await response.text();
-      console.error('Supabase error:', err);
-      return { statusCode: 500, body: 'DB error' };
-    }
-
-    // Parse query string tag into readable key: value pairs
     const tag = body.tag
       ? ' | ' + body.tag.split('&').map(p => {
           const [k, v] = p.split('=');
@@ -68,7 +41,7 @@ exports.handler = async (event) => {
         }).join(' | ')
       : '';
 
-    // Push notification via ntfy.sh
+    // ntfy fires first, always
     try {
       const ntfyRes = await fetch('https://ntfy.sh/vis_alertz', {
         method: 'POST',
@@ -79,15 +52,54 @@ exports.handler = async (event) => {
         },
         body: `${city}, ${country} | ${browser} | ${os} | ${isp}${tag}`,
       });
-      console.log('ntfy status:', ntfyRes.status);
+      if (!ntfyRes.ok) throw new Error(`ntfy responded ${ntfyRes.status}`);
+      console.log('ntfy ok');
     } catch (err) {
-      console.error('ntfy error:', err);
+      errors.push(`ntfy: ${err.message}`);
+      console.error('ntfy error:', err.message);
     }
 
-    return { statusCode: 200, body: JSON.stringify({ ok: true }) };
+    // Supabase, best-effort
+    try {
+      const dbRes = await fetch(
+        `${process.env.SUPABASE_URL}/rest/v1/visits`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': process.env.SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${process.env.SUPABASE_ANON_KEY}`,
+            'Prefer': 'return=minimal',
+          },
+          body: JSON.stringify({
+            ip, browser, os, isp, city, country,
+            timezone:   body.timezone   || 'unknown',
+            utc_time:   body.utc_time   || new Date().toISOString(),
+            local_time: body.local_time || 'unknown',
+          }),
+        }
+      );
+      if (!dbRes.ok) throw new Error(`supabase responded ${dbRes.status}: ${await dbRes.text()}`);
+      console.log('supabase ok');
+    } catch (err) {
+      errors.push(`supabase: ${err.message}`);
+      console.error('supabase error:', err.message);
+    }
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        ok: true,
+        ...(errors.length > 0 && { warnings: errors }),
+      }),
+    };
+
   } catch (err) {
-    console.error('Function error:', err);
-    return { statusCode: 500, body: 'Internal error' };
+    console.error('function error:', err.message);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ ok: false, error: err.message }),
+    };
   }
 };
 
